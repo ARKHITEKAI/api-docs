@@ -1,0 +1,226 @@
+openapi: 3.0.0
+info:
+  title: Arkitek API
+  version: 1.0.0
+  description: "Comprehensive API for AI visibility metrics, site management, and content JSON-LD synchronization."
+
+servers:
+  - url: http://localhost:4001
+    description: Development server
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # --- ENUMS ---
+    SiteType:
+      type: string
+      enum: [SHOPIFY, WORDPRESS, DRUPAL, WEBFLOW, CUSTOM]
+    ContentType:
+      type: string
+      enum: [product, page, blog, collection, article, misc]
+    ContentSource:
+      type: string
+      enum: [shopify, drupal, wordpress, webflow, custom]
+
+    # --- MODELS ---
+    Topic:
+      type: object
+      description: "Topic bucket for organizing prompts."
+      properties:
+        id: { type: string, format: uuid }
+        siteId: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        active: { type: boolean }
+        visibilityPct: { type: number, format: float }
+        shareOfVoicePct: { type: number, format: float }
+        avgRank: { type: number, format: float, nullable: true }
+        avgSentiment: { type: number, format: float, nullable: true }
+
+    PromptMetrics:
+      type: object
+      description: "Metrics for a specific prompt on a site."
+      properties:
+        promptId: { type: string, format: uuid }
+        promptText: { type: string }
+        topicIds: { type: array, items: { type: string } }
+        topicNames: { type: array, items: { type: string } }
+        visibilityPct: { type: number }
+        shareOfVoicePct: { type: number }
+        avgRank: { type: number, nullable: true }
+        avgSentiment: { type: number, nullable: true }
+        active: { type: boolean }
+
+    ContentSchema:
+      type: object
+      description: "JSON-LD schema record for site content."
+      properties:
+        id: { type: string }
+        siteId: { type: string }
+        type: { $ref: '#/components/schemas/ContentType' }
+        source: { $ref: '#/components/schemas/ContentSource' }
+        title: { type: string, nullable: true }
+        jsonld: { type: object }
+        status: { type: string, nullable: true }
+        active: { type: boolean }
+
+security:
+  - BearerAuth: []
+
+paths:
+  # --- SITES ---
+  /sites:
+    post:
+      summary: Connect a new site
+      tags: [Sites]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orgId, siteName, siteUrl, integration]
+              properties:
+                orgId: { type: string }
+                siteName: { type: string }
+                siteUrl: { type: string }
+                integration: { $ref: '#/components/schemas/SiteType' }
+      responses:
+        "200":
+          description: "Site created successfully"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  site: { type: object }
+                  redirectUrl: { type: string, nullable: true }
+
+  # --- TOPICS ---
+  /topics/{siteId}/topics:
+    post:
+      summary: Create a new topic
+      tags: [Topics]
+      parameters:
+        - name: siteId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        "200":
+          description: "Topic created successfully"
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Topic' }
+        "400":
+          description: "Missing topic name"
+
+  # --- MENTIONS ---
+  /mentions/{siteId}:
+    get:
+      summary: Get site dashboard data
+      tags: [Mentions]
+      parameters:
+        - name: siteId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: "Dashboard data including topics and prompts"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  siteId: { type: string }
+                  topics: { type: array, items: { type: object } }
+                  prompts: { type: array, items: { $ref: '#/components/schemas/PromptMetrics' } }
+
+  /mentions/analytics/industry/{siteId}:
+    get:
+      summary: Industry Ranking (Last 14 days)
+      tags: [Mentions]
+      parameters:
+        - name: siteId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: "List of competitor brands and their visibility metrics"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  siteId: { type: string }
+                  brands:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        visibility: { type: number }
+                        rank: { type: integer }
+
+  # --- CONTENT ---
+  /content/{siteId}:
+    get:
+      summary: Get all content records for a site
+      tags: [Content]
+      parameters:
+        - name: siteId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: "Grouped JSON-LD content schemas"
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items: { $ref: '#/components/schemas/ContentSchema' }
+
+  /content/{siteId}/{id}:
+    put:
+      summary: Update content JSON-LD
+      tags: [Content]
+      parameters:
+        - name: siteId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jsonld]
+              properties:
+                jsonld: { type: object }
+      responses:
+        "200":
+          description: "JSON-LD updated and sync triggered"
+        "404":
+          description: "Record not found"
