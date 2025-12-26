@@ -6,7 +6,7 @@ info:
 
 servers:
   - url: https://api.arkhitek.ai
-    description: Development server
+    description: API Server
 
 components:
   securitySchemes:
