@@ -5,7 +5,7 @@ info:
   description: "Comprehensive API for AI visibility metrics, site management, and content JSON-LD synchronization."
 
 servers:
-  - url: http://localhost:4001
+  - url: https://api.arkhitek.ai
     description: Development server
 
 components:
